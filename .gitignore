@@ -1,0 +1,12 @@
+# Python cache
+__pycache__/
+
+# Python binary files
+*.pyc
+
+# Env files
+*.env
+*.lock
+
+# Environment python
+.venv/
