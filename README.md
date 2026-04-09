@@ -1,7 +1,191 @@
 # Effective RAG
 
-# Anotações docker compose
- - Preciso remover as portas expostas
- - Criar um user para IA ```mc admin user add local service-ia service-ia123```
- - Adicionar políticas de acesso ```mc admin policy attach local readwrite --user service-ia```
- - Criar os chaves de acesso com ```mc admin accesskey create local service-ia```
+Backend service for PDF document ingestion and OCR-oriented preprocessing using FastAPI and WebSockets.
+
+The current pipeline receives a document reference through a WebSocket connection, downloads the PDF from MinIO, converts each page into an image, and prepares the input for a multimodal OCR stage. The OCR model implementation already exists in the repository, but it is not wired into the application lifecycle yet.
+
+## Overview
+
+Current capabilities:
+
+- WebSocket endpoint for extraction requests
+- MinIO-based PDF retrieval
+- PDF-to-image page extraction
+- application-level logging
+- base structure for OCR inference integration
+
+Planned capabilities:
+
+- OCR inference over extracted page images
+- structured extraction responses
+- persistence layer integration
+- automated test coverage for the processing pipeline
+
+## Architecture
+
+```text
+Client
+  -> WebSocket /extraction/ocr
+  -> payload: "bucket:path_document"
+  -> MinIO download
+  -> PDF page extraction
+  -> image artifacts
+  -> OCR stage (not enabled yet)
+```
+
+## Tech Stack
+
+- Python 3.11+
+- FastAPI
+- WebSockets
+- MinIO
+- PyMuPDF
+- Pillow
+- Transformers
+- PyTorch
+- Docker Compose
+
+## Requirements
+
+- Python 3.11 or newer
+- `uv`
+- Docker + Docker Compose
+- MinIO instance with accessible buckets and PDF objects
+
+## Getting Started
+
+### 1. Environment configuration
+
+Create a local `.env` file:
+
+```bash
+cp .env.template .env
+```
+
+Configure the required variables:
+
+```env
+MINIO_ACCESS_KEY=
+MINIO_SECRET_KEY=
+MINIO_ENDPOINT=
+
+MONGO_DB_PORT=27017
+```
+
+Environment variables:
+
+- `MINIO_ACCESS_KEY`: MinIO access key
+- `MINIO_SECRET_KEY`: MinIO secret key
+- `MINIO_ENDPOINT`: MinIO host and port, for example `localhost:9000`
+- `MONGO_DB_PORT`: local port exposed by the MongoDB container
+
+### 2. Start local dependencies
+
+The current `docker-compose.yml` provisions MongoDB only:
+
+```bash
+docker compose up -d
+```
+
+### 3. Install Python dependencies
+
+```bash
+uv sync
+```
+
+### 4. Run the application
+
+```bash
+uv run fastapi dev main.py
+```
+
+Alternative:
+
+```bash
+uv run uvicorn main:app --reload
+```
+
+Default local address:
+
+```text
+http://127.0.0.1:8000
+```
+
+## API
+
+### WebSocket endpoint
+
+```text
+ws://127.0.0.1:8000/extraction/ocr
+```
+
+### Input protocol
+
+The server expects a text payload in the following format:
+
+```text
+bucket:path_document
+```
+
+Example:
+
+```text
+documents:1/f1e4f147-0e55-498a-9ca6-29bd26167ea3.pdf
+```
+
+### Processing flow
+
+For each valid request, the service:
+
+1. validates the incoming payload
+2. downloads the PDF object from MinIO
+3. extracts PDF pages into temporary `.png` images
+4. emits confirmation and processing logs
+
+Invalid payloads are rejected with a protocol validation message over the WebSocket connection.
+
+## Local Test Client
+
+The repository includes a minimal WebSocket client in [test.py](/Users/lucas/Documents/Projetos/Effective-RAG/test.py):
+
+```bash
+uv run python test.py
+```
+
+## Project Structure
+
+```text
+.
+├── core/
+│   ├── config.py          # environment loading
+│   └── lifespan.py        # application resource setup
+├── models/
+│   └── ocr_extraction.py  # OCR model wrapper
+├── processing/
+│   └── pdf.py             # PDF page extraction
+├── routes/
+│   └── extraction.py      # WebSocket route and protocol handling
+├── services/
+│   ├── app_logger.py      # logger factory
+│   ├── bucket_minio.py    # MinIO access layer
+│   └── connection_manager.py
+├── main.py                # FastAPI entrypoint
+├── docker-compose.yml
+├── pyproject.toml
+└── test.py
+```
+
+## Current Status
+
+The OCR inference layer is implemented in [models/ocr_extraction.py](/Users/lucas/Documents/Projetos/Effective-RAG/models/ocr_extraction.py), using `zai-org/GLM-OCR`, but it is currently disabled in [core/lifespan.py](/Users/lucas/Documents/Projetos/Effective-RAG/core/lifespan.py). The application initializes `app.state.ocr_ext` as `None`, so the runtime flow stops after PDF page extraction.
+
+Additional notes:
+
+- temporary files are used for both PDF downloads and generated page images
+- logging is configured to `stdout`
+- MongoDB is available in local infrastructure but is not integrated into the main processing flow yet
+- `transformers` is sourced directly from the Hugging Face GitHub repository in [pyproject.toml](/Users/lucas/Documents/Projetos/Effective-RAG/pyproject.toml)
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](/Users/lucas/Documents/Projetos/Effective-RAG/LICENSE).
