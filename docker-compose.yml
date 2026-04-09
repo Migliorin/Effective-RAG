@@ -1,0 +1,17 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    ports:
+      - "${MONGO_DB_PORT}:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - app_net
+volumes:
+  mongo_data:
+
+networks:
+  app_net:
+    driver: bridge
