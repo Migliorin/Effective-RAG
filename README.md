@@ -1,6 +1,6 @@
 # Effective RAG
 
-Backend service for PDF document ingestion and OCR-oriented preprocessing using FastAPI and WebSockets.
+Backend service for PDF document ingestion and OCR-oriented preprocessing using native WebSockets.
 
 The current pipeline receives a document reference through a WebSocket connection, downloads the PDF from MinIO, converts each page into an image, and prepares the input for a multimodal OCR stage. The OCR model implementation already exists in the repository, but it is not wired into the application lifecycle yet.
 
@@ -36,7 +36,6 @@ Client
 ## Tech Stack
 
 - Python 3.11+
-- FastAPI
 - WebSockets
 - MinIO
 - PyMuPDF
@@ -68,6 +67,8 @@ Configure the required variables:
 MINIO_ACCESS_KEY=
 MINIO_SECRET_KEY=
 MINIO_ENDPOINT=
+HOST=0.0.0.0
+PORT=8000
 
 MONGO_DB_PORT=27017
 ```
@@ -77,6 +78,8 @@ Environment variables:
 - `MINIO_ACCESS_KEY`: MinIO access key
 - `MINIO_SECRET_KEY`: MinIO secret key
 - `MINIO_ENDPOINT`: MinIO host and port, for example `localhost:9000`
+- `HOST`: interface where the websocket server binds, for example `0.0.0.0`
+- `PORT`: websocket server port, for example `8000`
 - `MONGO_DB_PORT`: local port exposed by the MongoDB container
 
 ### 2. Start local dependencies
@@ -96,19 +99,13 @@ uv sync
 ### 4. Run the application
 
 ```bash
-uv run fastapi dev main.py
-```
-
-Alternative:
-
-```bash
-uv run uvicorn main:app --reload
+uv run python main.py
 ```
 
 Default local address:
 
 ```text
-http://127.0.0.1:8000
+ws://127.0.0.1:8000
 ```
 
 ## API
@@ -157,19 +154,18 @@ uv run python test.py
 ```text
 .
 ├── core/
-│   ├── config.py          # environment loading
-│   └── lifespan.py        # application resource setup
+│   └── config.py          # environment loading
 ├── models/
 │   └── ocr_extraction.py  # OCR model wrapper
 ├── processing/
 │   └── pdf.py             # PDF page extraction
 ├── routes/
-│   └── extraction.py      # WebSocket route and protocol handling
+│   └── extraction.py      # WebSocket route handler and protocol parsing
 ├── services/
 │   ├── app_logger.py      # logger factory
 │   ├── bucket_minio.py    # MinIO access layer
 │   └── connection_manager.py
-├── main.py                # FastAPI entrypoint
+├── main.py                # native WebSocket entrypoint
 ├── docker-compose.yml
 ├── pyproject.toml
 └── test.py
@@ -177,7 +173,7 @@ uv run python test.py
 
 ## Current Status
 
-The OCR inference layer is implemented in [models/ocr_extraction.py](/Users/lucas/Documents/Projetos/Effective-RAG/models/ocr_extraction.py), using `zai-org/GLM-OCR`, but it is currently disabled in [core/lifespan.py](/Users/lucas/Documents/Projetos/Effective-RAG/core/lifespan.py). The application initializes `app.state.ocr_ext` as `None`, so the runtime flow stops after PDF page extraction.
+The OCR inference layer is implemented in [models/ocr_extraction.py](/Users/lucas/Documents/Projetos/Effective-RAG/models/ocr_extraction.py), using `zai-org/GLM-OCR`, and its initialization is now centralized in [main.py](/home/lumalfa/projetos/Effective-RAG/main.py). The `routes/extraction.py` module keeps the extraction protocol and route handler, while the server lifecycle and route dispatch now live in the native WebSocket entrypoint.
 
 Additional notes:
 
