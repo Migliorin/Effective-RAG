@@ -7,7 +7,8 @@ async def main():
     uri = "ws://127.0.0.1:8000/extraction/ocr"
 
     async with websockets.connect(uri) as websocket:
-        await websocket.send("documents:1/f1e4f147-0e55-498a-9ca6-29bd26167ea3.pdf")
+        #await websocket.send("documents:1/811131b0-67ff-443e-89fb-4b956a7fb2b6.pdf")
+        await websocket.send("documents:1/c168a1e6-b5ec-408e-b0b3-50803cbc253c.pdf")
         response = await websocket.recv()
         print(f"Resposta: {response}")
 
