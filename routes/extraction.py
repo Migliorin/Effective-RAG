@@ -1,7 +1,10 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import uuid
 import json
 
-router = APIRouter(prefix="/extraction")
+from websockets.asyncio.server import ServerConnection
+from websockets.exceptions import ConnectionClosed
+
+EXTRACTION_ROUTE = "/extraction/ocr"
 
 
 def parse_extraction_protocol(data: str) -> tuple[str, str]:
@@ -13,19 +16,17 @@ def parse_extraction_protocol(data: str) -> tuple[str, str]:
     return bucket, path_document
 
 
-@router.websocket("/ocr")
-async def extraction(websocket: WebSocket):
-    manager = websocket.app.state.connection_manager
-    logger = websocket.app.state.logger
-    minio_client = websocket.app.state.minio_client
-    pdf_processing = websocket.app.state.pdf_processing
+async def extraction(websocket: ServerConnection, app_context):
+    manager = app_context.connection_manager
+    logger = app_context.logger
+    queue = app_context.queue
+    connection_id = str(uuid.uuid4())
 
-    await manager.connect(websocket)
-    logger.info("WebSocket conectado em /extraction/ocr")
+    await manager.connect(connection_id, websocket)
+    logger.info("WebSocket conectado em %s connection_id=%s", EXTRACTION_ROUTE, connection_id)
 
     try:
-        while True:
-            data = await websocket.receive_text()
+        async for data in websocket:
             logger.info("Mensagem recebida no websocket de OCR: %s", data)
             try:
                 bucket_name, object_name = parse_extraction_protocol(data)
@@ -34,28 +35,21 @@ async def extraction(websocket: WebSocket):
                 await manager.send_personal_message(str(exc), websocket)
                 continue
 
-            await manager.send_personal_message(
-                f"Received bucket={bucket_name} path_document={object_name}",
-                websocket,
-            )
-            logger.info(
-                "Iniciando download do PDF no MinIO. bucket=%s object_name=%s",
-                bucket_name,
-                object_name,
-            )
-            document_path:str = minio_client.download_pdf(
-                bucket_name=bucket_name,
-                object_name=object_name,
-            )
-            logger.info("Download em %s",document_path)
+            job_obj = {
+                "id": str(uuid.uuid4()),
+                "bucket_name": bucket_name,
+                "object_name": object_name,
+            }
+            queue.put(job_obj)
 
-            list_paths: list[str] = pdf_processing.extract_pages_into_imgs(document_path)
+            await manager.send_personal_message(f"Job iniciado: {json.dumps(job_obj)}", websocket)
 
-            logger.info(f"Imagens extraidas em:\n{json.dumps(list_paths,indent=1)}",)
-
-    except WebSocketDisconnect:
-        logger.info("WebSocket desconectado em /extraction/ocr")
-        manager.disconnect(websocket)
+    except ConnectionClosed:
+        logger.info("WebSocket desconectado em %s connection_id=%s", EXTRACTION_ROUTE, connection_id)
+        manager.disconnect(connection_id)
     except Exception:
         logger.exception("Erro durante o processamento do websocket de OCR")
-        manager.disconnect(websocket)
+        manager.disconnect(connection_id)
+    else:
+        logger.info("WebSocket encerrado pelo cliente em %s connection_id=%s", EXTRACTION_ROUTE, connection_id)
+        manager.disconnect(connection_id)

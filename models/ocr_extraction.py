@@ -1,5 +1,4 @@
 from transformers import AutoProcessor, AutoModelForImageTextToText
-import torch
 
 class OcrExtraction:
     def __init__(self,model_path = "zai-org/GLM-OCR"):

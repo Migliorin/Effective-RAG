@@ -1,1 +1,1 @@
-from .extraction import router as router_extraction
+from .extraction import EXTRACTION_ROUTE, extraction

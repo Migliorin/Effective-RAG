@@ -1,1 +1,1 @@
-from .lifespan import lifespan
+from .config import get_dotenv_values
