@@ -1,3 +1,5 @@
+import io
+import json
 from minio import Minio
 from tempfile import NamedTemporaryFile
 
@@ -15,5 +17,28 @@ class BucketMinio:
             self.client.fget_object(bucket_name,object_name,tf.name)
 
         return tf.name
+    
+    def verify_folder(self,bucket_name:str,prefix:str) -> bool:
+        objects = self.client.list_objects(
+            bucket_name,
+            prefix=prefix,
+            recursive=True
+        )
+        return any(True for _ in objects)
+
+    def put_json(self,bucket_name:str,object_name:str,data:dict) -> str | None:
+        json_bytes = json.dumps(data, ensure_ascii=False).encode("utf-8")
+
+        result = self.client.put_object(
+            bucket_name=bucket_name,
+            object_name=object_name,
+            data=io.BytesIO(json_bytes),
+            length=len(json_bytes),
+            content_type="application/json"
+        )
+        if result:
+            return result.object_name
+        else:
+            return None
 
 

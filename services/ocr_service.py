@@ -5,6 +5,7 @@ from processing import PDF
 from models import OcrExtraction
 from services import BucketMinio
 
+from uuid import uuid4
 
 class OCRService():
     def __init__(self, values: dict, queue, logger):
@@ -18,12 +19,16 @@ class OCRService():
         self.ocr_ext = OcrExtraction()
         self.logger = logger
         self.queue = queue
+        self.bucket_name = values.get("BUCKET_EXTRATION")
 
     def extract_ocr_pages(self):
         logger = self.logger
         minio_client = self.minio_client
         pdf_processing = self.pdf_processing
         ocr_ext = self.ocr_ext
+
+        list_paths = None
+        document_path = None
 
         while(True):
             tarefa = self.queue.get()  # bloqueia até chegar algo
@@ -36,6 +41,10 @@ class OCRService():
             job_id = tarefa.get("id")
             bucket_name = tarefa.get("bucket_name")
             object_name = tarefa.get("object_name")
+
+            existi_folder = minio_client.verify_folder(bucket_name,job_id)
+
+            #logger.info("Criando pasta em bucket para os arquivos extraídos")
 
             try:
                 logger.info(
@@ -54,11 +63,30 @@ class OCRService():
                 logger.info(f"Imagens extraidas em:\n{json.dumps(list_paths, indent=1)}")
 
                 logger.info("Iniciando extração")
-                for list_path_ in list_paths:
+                for idx, list_path_ in enumerate(list_paths,start=1):
                     text = ocr_ext(list_path_)
-                    logger.info("Texto extraído:\n%s\n", text)
-                    if os.path.exists(list_path_):
-                        os.remove(list_path_)
+                    path_extract = f"{job_id}/{uuid4()}.json"
+                    minio_client.put_json(
+                        self.bucket_name,
+                        path_extract,
+                        {
+                            **tarefa,
+                            "content": text,
+                            "page": idx,
+                        }
+                    )
+                    logger.info("Texto extraído:\n%s\n", text[:50])
+                    logger.info(f"Armazenando extracao em: {path_extract}")
 
             except Exception as exc:
                 logger.exception("Erro ao processar job_id=%s\n%s", job_id,exc)
+
+            finally:
+                if(list_paths is not None):
+                    for list_path_ in list_paths:
+                        if os.path.exists(list_path_):
+                            os.remove(list_path_)
+                elif(document_path is not None):
+                    if os.path.exists(document_path):
+                        os.remove(document_path)
+
