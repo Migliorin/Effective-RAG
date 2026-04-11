@@ -29,6 +29,7 @@ class OCRService():
 
         list_paths = None
         document_path = None
+        pages = [-1]
 
         while(True):
             tarefa = self.queue.get()  # bloqueia até chegar algo
@@ -42,9 +43,12 @@ class OCRService():
             bucket_name = tarefa.get("bucket_name")
             object_name = tarefa.get("object_name")
 
-            existi_folder = minio_client.verify_folder(bucket_name,job_id)
+            exist_folder = minio_client.verify_folder(self.bucket_name,job_id)
 
-            #logger.info("Criando pasta em bucket para os arquivos extraídos")
+            if(exist_folder):
+                logger.info(f"Job id existente no bucket {job_id}")
+                pages = minio_client.get_pages(self.bucket_name,job_id)
+                logger.info(f"Paginas extraidas: {json.dumps(pages)}")
 
             try:
                 logger.info(
@@ -61,9 +65,11 @@ class OCRService():
 
                 list_paths: list[str] = pdf_processing.extract_pages_into_imgs(document_path)
                 logger.info(f"Imagens extraidas em:\n{json.dumps(list_paths, indent=1)}")
-
+ 
                 logger.info("Iniciando extração")
                 for idx, list_path_ in enumerate(list_paths,start=1):
+                    if(idx <= pages[-1]):
+                        continue
                     text = ocr_ext(list_path_)
                     path_extract = f"{job_id}/{uuid4()}.json"
                     minio_client.put_json(
@@ -73,10 +79,13 @@ class OCRService():
                             **tarefa,
                             "content": text,
                             "page": idx,
+                            "total_pages": len(list_paths)
                         }
                     )
                     logger.info("Texto extraído:\n%s\n", text[:50])
                     logger.info(f"Armazenando extracao em: {path_extract}")
+                pages = [-1]
+                logger.info("Iniciando finalizada")
 
             except Exception as exc:
                 logger.exception("Erro ao processar job_id=%s\n%s", job_id,exc)
