@@ -45,6 +45,18 @@ class BucketMinio:
         list_pages.sort()
 
         return list_pages
+    
+    def get_json_object(self,bucket_name:str,object_name:str) -> dict:
+        try:
+            response = self.client.get_object(
+                bucket_name,
+                object_name=object_name
+            )
+            conteudo:dict = json.loads(response.read().decode("utf-8"))
+            return conteudo
+        except:
+            return {}
+                                
 
 
     def put_json(self,bucket_name:str,object_name:str,data:dict) -> str | None:

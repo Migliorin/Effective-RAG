@@ -6,9 +6,11 @@ from models import OcrExtraction
 from services import BucketMinio
 
 from uuid import uuid4
+from queue import Queue
+from services import AppLogger
 
 class OCRService():
-    def __init__(self, values: dict, queue, logger):
+    def __init__(self, values: dict, queue: Queue, queue_format: Queue, logger:AppLogger):
         self.minio_client = BucketMinio(
             endpoint=values.get("MINIO_ENDPOINT"),
             access_key=values.get("MINIO_ACCESS_KEY"),
@@ -19,6 +21,7 @@ class OCRService():
         self.ocr_ext = OcrExtraction()
         self.logger = logger
         self.queue = queue
+        self.queue_format = queue_format
         self.bucket_name = values.get("BUCKET_EXTRATION")
 
     def extract_ocr_pages(self):
@@ -67,6 +70,8 @@ class OCRService():
                 logger.info(f"Imagens extraidas em:\n{json.dumps(list_paths, indent=1)}")
  
                 logger.info("Iniciando extração")
+                path_extract_list = list()
+
                 for idx, list_path_ in enumerate(list_paths,start=1):
                     if(idx <= pages[-1]):
                         continue
@@ -82,10 +87,17 @@ class OCRService():
                             "total_pages": len(list_paths)
                         }
                     )
+                    path_extract_list.append(path_extract)
                     logger.info("Texto extraído:\n%s\n", text[:50])
                     logger.info(f"Armazenando extracao em: {path_extract}")
                 pages = [-1]
-                logger.info("Iniciando finalizada")
+                logger.info("Extração finalizada")
+
+                job_obj = {
+                    "id" : job_id,
+                    "list_extraction" : path_extract_list
+                }
+                self.queue_format.put(job_obj)
 
             except Exception as exc:
                 logger.exception("Erro ao processar job_id=%s\n%s", job_id,exc)
