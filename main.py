@@ -8,15 +8,18 @@ from websockets.asyncio.server import ServerConnection, serve
 
 from core import get_dotenv_values
 from routes import EXTRACTION_ROUTE, extraction
-from services import AppLogger, ConnectionManager, OCRService
+from services import AppLogger, ConnectionManager, OCRService, FormatService
 
 @dataclass
 class AppContext:
     logger: object
     queue: Queue
+    queue_format: Queue
     connection_manager: ConnectionManager
     ocr_service: OCRService
+    format_service: FormatService
     worker_thread: Optional[Thread]
+    worker_thread_format: Optional[Thread]
 
 
 @dataclass(frozen=True)
@@ -34,38 +37,51 @@ def build_server_config(values: dict) -> ServerConfig:
 def build_app_context(values: dict) -> AppContext:
     logger = AppLogger().get_logger()
     queue = Queue()
+    queue_format = Queue()
     connection_manager = ConnectionManager()
-    ocr_service = OCRService(values, queue, logger)
+    ocr_service = OCRService(values, queue, queue_format, logger)
+    format_service = FormatService(values, queue_format, logger)
 
     return AppContext(
         logger=logger,
         queue=queue,
+        queue_format=queue_format,
         connection_manager=connection_manager,
         ocr_service=ocr_service,
+        format_service=format_service,
         worker_thread=None,
+        worker_thread_format=None
+
     )
 
 
-def start_extraction_worker(app_context: AppContext) -> Thread:
-    if app_context.worker_thread is not None and app_context.worker_thread.is_alive():
-        return app_context.worker_thread
+def start_extraction_worker(app_context: AppContext) -> None:
+    if app_context.worker_thread is None or not app_context.worker_thread.is_alive():
+        app_context.worker_thread = Thread(
+            target=app_context.ocr_service.extract_ocr_pages,
+            name="ocr-extraction-worker",
+        )
+        app_context.worker_thread.start()
 
-    worker_thread = Thread(target=app_context.ocr_service.extract_ocr_pages, name="ocr-extraction-worker")
-    worker_thread.start()
-    app_context.worker_thread = worker_thread
-    return worker_thread
+    if app_context.worker_thread_format is None or not app_context.worker_thread_format.is_alive():
+        app_context.worker_thread_format = Thread(
+            target=app_context.format_service.format_text,
+            name="format-text-worker",
+        )
+        app_context.worker_thread_format.start()
 
 
-def stop_extraction_worker(app_context: AppContext):
-    worker_thread = app_context.worker_thread
-    if worker_thread is None:
-        return
+def stop_extraction_worker(app_context: AppContext) -> None:
+    workers = [
+        (app_context.queue, app_context.worker_thread, "worker_thread"),
+        (app_context.queue_format, app_context.worker_thread_format, "worker_thread_format"),
+    ]
 
-    if worker_thread.is_alive():
-        app_context.queue.put(None)
-        worker_thread.join()
-
-    app_context.worker_thread = None
+    for queue_, worker_, attr_name in workers:
+        if worker_ is not None and worker_.is_alive():
+            queue_.put(None)
+            worker_.join()
+        setattr(app_context, attr_name, None)
 
 
 async def websocket_router(websocket: ServerConnection, app_context: AppContext):
