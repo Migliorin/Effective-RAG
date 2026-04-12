@@ -1,16 +1,18 @@
 services:
-  mongo:
-    image: mongo:7
-    container_name: mongo
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
     restart: unless-stopped
     ports:
-      - "${MONGO_DB_PORT}:27017"
+      - "${QDRANT_REST_PORT}:6333"
+      - "${QDRANT_GRPC_PORT}:6334"
     volumes:
-      - mongo_data:/data/db
+      - qdrant_data:/qdrant/storage
     networks:
       - app_net
+
 volumes:
-  mongo_data:
+  qdrant_data:
 
 networks:
   app_net:
