@@ -89,7 +89,7 @@ class OCRService():
                     )
                     path_extract_list.append(path_extract)
                     logger.info("Texto extraído:\n%s\n", text[:50])
-                    logger.info(f"Armazenando extracao em: {path_extract}")
+                    logger.info(f"[{idx}/{len(list_paths)}] Armazenando extracao em: {path_extract}")
                 pages = [-1]
                 logger.info("Extração finalizada")
 

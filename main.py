@@ -7,8 +7,8 @@ from threading import Thread
 from websockets.asyncio.server import ServerConnection, serve
 
 from core import get_dotenv_values
-from routes import EXTRACTION_ROUTE, extraction
-from services import AppLogger, ConnectionManager, OCRService, FormatService
+from routes import EXTRACTION_ROUTE, extraction, search_document, SEARCH_ROUTE
+from services import AppLogger, ConnectionManager, OCRService, FormatService, QdrantService, LLMService
 
 @dataclass
 class AppContext:
@@ -18,8 +18,11 @@ class AppContext:
     connection_manager: ConnectionManager
     ocr_service: OCRService
     format_service: FormatService
+    qdrant_service: QdrantService
+    llm_service: LLMService
     worker_thread: Optional[Thread]
     worker_thread_format: Optional[Thread]
+
 
 
 @dataclass(frozen=True)
@@ -40,7 +43,10 @@ def build_app_context(values: dict) -> AppContext:
     queue_format = Queue()
     connection_manager = ConnectionManager()
     ocr_service = OCRService(values, queue, queue_format, logger)
-    format_service = FormatService(values, queue_format, logger)
+    qdrant_service = QdrantService(values)
+    format_service = FormatService(values, queue_format, logger, qdrant_service)
+    llm_service=LLMService(values)
+    
 
     return AppContext(
         logger=logger,
@@ -49,6 +55,8 @@ def build_app_context(values: dict) -> AppContext:
         connection_manager=connection_manager,
         ocr_service=ocr_service,
         format_service=format_service,
+        qdrant_service=qdrant_service,
+        llm_service=llm_service,
         worker_thread=None,
         worker_thread_format=None
 
@@ -88,6 +96,8 @@ async def websocket_router(websocket: ServerConnection, app_context: AppContext)
     path = websocket.request.path
     routes = {
         EXTRACTION_ROUTE: extraction,
+        SEARCH_ROUTE: search_document
+
     }
 
     handler = routes.get(path)

@@ -36,7 +36,7 @@ async def extraction(websocket: ServerConnection, app_context):
                 continue
 
             job_obj = {
-                "id": str(uuid.uuid4()),
+                "id": object_name.split("/")[-1].replace(".pdf",""),
                 "bucket_name": bucket_name,
                 "object_name": object_name,
             }
