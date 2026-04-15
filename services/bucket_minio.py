@@ -27,24 +27,36 @@ class BucketMinio:
         )
         return any(True for _ in objects)
     
-    def get_pages(self,bucket_name:str,prefix:str) -> list[int]:
+    def get_pages(self,bucket_name:str,prefix:str) -> list[list[int],list[str]]:
         prefix = prefix.strip("/") + "/"
         objects = self.client.list_objects(
             bucket_name,
             prefix=prefix,
             recursive=True
         )
-        list_pages = list()
+        
+        list_pages = []
+        list_paths = []
+
+        temp_items = []
+
         for obj in objects:
             if obj.object_name.endswith(".json"):
                 response = self.client.get_object(bucket_name, obj.object_name)
-                conteudo:dict = json.loads(response.read().decode("utf-8"))
-                if "page" in conteudo.keys():
-                    list_pages.append(conteudo.get("page"))
+                conteudo: dict = json.loads(response.read().decode("utf-8"))
 
-        list_pages.sort()
+                page = conteudo.get("page")
+                object_name = conteudo.get("object_name")
 
-        return list_pages
+                if page is not None and object_name is not None:
+                    temp_items.append((page, object_name))
+
+        temp_items.sort(key=lambda x: x[0])
+
+        list_pages = [page for page, _ in temp_items]
+        list_paths = [path for _, path in temp_items]
+
+        return list_pages, list_paths
     
     def get_json_object(self,bucket_name:str,object_name:str) -> dict:
         try:

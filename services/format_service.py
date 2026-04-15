@@ -6,7 +6,6 @@ from .llm_service import LLMService
 
 from queue import Queue
 
-import re
 import json
 
 
@@ -28,6 +27,7 @@ PROCESSAMENTO:
   - cabeçalhos repetidos
   - rodapés repetidos
   - números de página isolados
+  - sumários com identificação de páginas
 
 FORMATAÇÃO:
 - Use títulos (#) apenas se for claramente um título
@@ -67,29 +67,43 @@ class FormatService():
             
             if(list_extraction):
                 md_list = list()
+                buffer_contents = []
+
                 logger.info(f"Iniciando união ({len(list_extraction)} jsons) dos conteúdos do job: {job_id}")
-                for idx, path_extract in enumerate(list_extraction,start=1):
+
+                for idx, path_extract in enumerate(list_extraction, start=1):
                     logger.info(f"União [{idx}/{len(list_extraction)}]")
-                    obj:dict = minio_client.get_json_object(self.bucket_name,path_extract)
-                    content_string = obj.get("content","")
-                    if(len(content_string) != 0):
-                        messages=[
-                            {
-                                "role": "system", 
-                                "content": system_prompt
-                            },
-                            {
-                                "role": "user", 
-                                "content": f"Converta o texto abaixo para Markdown:\n\n{content_string}"
-                            }
-                        ]
-                        res = self.client_openai.call_chat(messages,think=False)
-                        md_list.append(res)
+
+                    obj: dict = minio_client.get_json_object(self.bucket_name, path_extract)
+                    content_string = obj.get("content", "")
+
+                    if len(content_string) != 0:
+                        buffer_contents.append(content_string)
+
+                    if len(buffer_contents) == 2 or idx == len(list_extraction):
+                        if buffer_contents:
+                            joined_content = "\n\n".join(buffer_contents)
+
+                            messages = [
+                                {
+                                    "role": "system",
+                                    "content": system_prompt
+                                },
+                                {
+                                    "role": "user",
+                                    "content": f"Converta o texto abaixo para Markdown:\n\n{joined_content}"
+                                }
+                            ]
+
+                            res = self.client_openai.call_chat(messages, think=False,model="llama3.1")
+                            md_list.append(res)
+                            buffer_contents = []
+
                 logger.info("União finalizada")
 
-            # with open("./tmp.md","r",encoding="utf-8") as outfile:
-            #     md_list:str = "".join(outfile.readlines())
-            #     outfile.close()
+                with open("./tmp.md","w+") as outfile:
+                    outfile.write("".join(md_list))
+                    outfile.close()
 
                 chunks = self.docling.create_chunks("\n".join(md_list))
                 with open("./tmp.json","w+") as outfile:
