@@ -1,17 +1,54 @@
+import argparse
 import asyncio
+import json
 
 import websockets
 
 
-async def main():
-    uri = "ws://127.0.0.1:8088/extraction/ocr"
+async def main(uri: str, document_id: str, question: str) -> None:
+    message = f"{document_id}:{question}"
 
     async with websockets.connect(uri) as websocket:
-        #await websocket.send("documents:1/811131b0-67ff-443e-89fb-4b956a7fb2b6.pdf")
-        await websocket.send("documents:1/90a380df-9284-47bb-9b24-66bdcb679f8e.pdf")
+        await websocket.send(message)
         response = await websocket.recv()
-        print(f"Resposta: {response}")
+
+        if response:
+            try:
+                response_data = json.loads(response)
+                print(f"Resposta: {response_data.get('answer', '')}")
+            except json.JSONDecodeError:
+                print("Resposta recebida não é um JSON válido:")
+                print(response)
+        else:
+            print("Sem resposta")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Cliente WebSocket para consulta de documentos."
+    )
+
+    parser.add_argument(
+        "--uri",
+        default="ws://127.0.0.1:8088/search/document",
+        help="URI do servidor WebSocket",
+    )
+
+    parser.add_argument(
+        "--document-id",
+        required=True,
+        help="ID do documento",
+    )
+
+    parser.add_argument(
+        "--question",
+        required=True,
+        help="Pergunta a ser enviada",
+    )
+
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    args = parse_args()
+    asyncio.run(main(args.uri, args.document_id, args.question))
