@@ -8,6 +8,7 @@ dependencies = [
     "accelerate>=1.13.0",
     "docling>=2.86.0",
     "glmocr[selfhosted]>=0.1.5",
+    "jupyter>=1.1.1",
     "minio>=7.2.20",
     "openai>=2.31.0",
     "pillow>=12.1.1",
