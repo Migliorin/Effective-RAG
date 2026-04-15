@@ -53,7 +53,7 @@ class QdrantService:
             points=points,
         )
 
-    def search(self, query: str, document_id: str, limit: int = 50) -> list[dict]:
+    def search(self, query: str, document_id: str, limit: int = 50, rerank_limt: int = 5) -> list[dict]:
         query_vector = self._embed(query)
 
         result = self.client.query_points(
@@ -67,7 +67,7 @@ class QdrantService:
                     )
                 ]
             ),
-            limit=100,
+            limit=limit,
         )
 
         candidates = [
@@ -94,4 +94,4 @@ class QdrantService:
 
         candidates.sort(key=lambda x: x["rerank_score"], reverse=True)
 
-        return candidates[:limit]
+        return candidates[:rerank_limt]

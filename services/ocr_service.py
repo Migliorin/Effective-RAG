@@ -35,7 +35,7 @@ class OCRService():
         pages = [-1]
 
         while(True):
-            tarefa = self.queue.get()  # bloqueia até chegar algo
+            tarefa:dict = self.queue.get()  # bloqueia até chegar algo
             if tarefa is None:
                 logger.info("Encerrando serviço de extração")
                 break
@@ -50,7 +50,7 @@ class OCRService():
 
             if(exist_folder):
                 logger.info(f"Job id existente no bucket {job_id}")
-                pages = minio_client.get_pages(self.bucket_name,job_id)
+                pages, pages_path = minio_client.get_pages(self.bucket_name,job_id)
                 logger.info(f"Paginas extraidas: {json.dumps(pages)}")
 
             try:
@@ -73,7 +73,9 @@ class OCRService():
                 path_extract_list = list()
 
                 for idx, list_path_ in enumerate(list_paths,start=1):
-                    if(idx <= pages[-1]):
+                    if(idx - 1 <= pages[-1]):
+                        path_ = f"{job_id}/{pages_path[idx-1].split('/')[-1]}"
+                        path_extract_list.append(path_)
                         continue
                     text = ocr_ext(list_path_)
                     path_extract = f"{job_id}/{uuid4()}.json"
@@ -81,7 +83,8 @@ class OCRService():
                         self.bucket_name,
                         path_extract,
                         {
-                            **tarefa,
+                            "bucket_name":self.bucket_name,
+                            "object_name": path_extract,
                             "content": text,
                             "page": idx,
                             "total_pages": len(list_paths)
@@ -97,6 +100,7 @@ class OCRService():
                     "id" : job_id,
                     "list_extraction" : path_extract_list
                 }
+
                 self.queue_format.put(job_obj)
 
             except Exception as exc:
