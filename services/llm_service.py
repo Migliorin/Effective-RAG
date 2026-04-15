@@ -7,19 +7,35 @@ class LLMService:
             base_url=values.get("OPENAI_URL"),
             api_key=values.get("OPENAI_KEY"),
         )
-
-    def call_chat(self, messages, think=True, model="qwen3") -> str:
-        params = {
-            "temperature": 0.6 if think else 0.7,
-            "top_p": 0.95 if think else 0.8,
+        self.params = {
+            "temperature": 0.2,
+            "top_p": 0.85,
+            "top_k": 30,
+            "min_p": 0.0,
+            "repeat_penalty": 1.12,
+            "repeat_last_n": 128,
+            "seed": 42
         }
 
+    def call_chat(self, messages, think=True, model="llama",params=None) -> str:
+        if(params is None):
+            params = self.params
+        
         completion = self.client_openai.chat.completions.create(
             model=model,
             messages=messages,
-            **params,
+            temperature=params["temperature"],
+            top_p=params["top_p"],
+            extra_body={
+                "num_ctx": params.get("num_ctx",4096),
+                "top_k": params["top_k"],
+                "min_p": params["min_p"],
+                "repeat_penalty": params["repeat_penalty"],
+                "repeat_last_n": params["repeat_last_n"],
+                "seed": params["seed"]
+            }
         )
-
+        
         res_final = completion.choices[0].message.content
         res_final = re.sub(r"<think>.*?</think>", "", res_final, flags=re.DOTALL)
 

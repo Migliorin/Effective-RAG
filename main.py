@@ -8,7 +8,7 @@ from websockets.asyncio.server import ServerConnection, serve
 
 from core import get_dotenv_values
 from routes import EXTRACTION_ROUTE, extraction, search_document, SEARCH_ROUTE
-from services import AppLogger, ConnectionManager, OCRService, FormatService, QdrantService, LLMService
+from services import AppLogger, ConnectionManager, OCRService, FormatService, QdrantService, LLMService, SearchService
 
 @dataclass
 class AppContext:
@@ -20,6 +20,7 @@ class AppContext:
     format_service: FormatService
     qdrant_service: QdrantService
     llm_service: LLMService
+    search_service: SearchService
     worker_thread: Optional[Thread]
     worker_thread_format: Optional[Thread]
 
@@ -46,7 +47,7 @@ def build_app_context(values: dict) -> AppContext:
     qdrant_service = QdrantService(values)
     format_service = FormatService(values, queue_format, logger, qdrant_service)
     llm_service=LLMService(values)
-    
+    search_service=SearchService(values)
 
     return AppContext(
         logger=logger,
@@ -57,6 +58,7 @@ def build_app_context(values: dict) -> AppContext:
         format_service=format_service,
         qdrant_service=qdrant_service,
         llm_service=llm_service,
+        search_service=search_service,
         worker_thread=None,
         worker_thread_format=None
 
