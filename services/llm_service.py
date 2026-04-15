@@ -8,14 +8,14 @@ class LLMService:
             api_key=values.get("OPENAI_KEY"),
         )
 
-    def call_chat(self, messages, think=True) -> str:
+    def call_chat(self, messages, think=True, model="qwen3") -> str:
         params = {
             "temperature": 0.6 if think else 0.7,
             "top_p": 0.95 if think else 0.8,
         }
 
         completion = self.client_openai.chat.completions.create(
-            model="qwen3",
+            model=model,
             messages=messages,
             **params,
         )
