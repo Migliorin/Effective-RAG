@@ -1,17 +1,23 @@
-from services import AppLogger
-from services import BucketMinio
-from .docling_service import DoclingService
-from .qdrant_service import QdrantService
-from .llm_service import LLMService
-from prompts import FORMAT_PROMPT
-
+import json
 from queue import Queue
 
-import json
+from dto import FormatExtractionDto
+from prompts import FORMAT_PROMPT
+from services import AppLogger, BucketMinio
+
+from .docling_service import DoclingService
+from .llm_service import LLMService
+from .qdrant_service import QdrantService
 
 
-class FormatService():
-    def __init__(self, values: dict, queue_format: Queue, logger:AppLogger, qdrant_service: QdrantService):
+class FormatService:
+    def __init__(
+        self,
+        values: dict,
+        queue_format: Queue,
+        logger: AppLogger,
+        qdrant_service: QdrantService,
+    ):
         self.minio_client = BucketMinio(
             endpoint=values.get("MINIO_ENDPOINT"),
             access_key=values.get("MINIO_ACCESS_KEY"),
@@ -20,34 +26,41 @@ class FormatService():
         )
         self.docling = DoclingService()
         self.client_openai = LLMService(values)
+        self.bucket_name = values.get("BUCKET_EXTRATION")
+        self.debug_format = values.get("DEBUG_FORMAT", False)
+        self.range_union_format_page = int(values.get("RANGE_UNION_FORMAT_PAGE", 2))
         self.logger = logger
         self.queue_format = queue_format
-        self.bucket_name = values.get("BUCKET_EXTRATION")
         self.qdrant_service = qdrant_service
-
 
     def format_text(self):
         logger = self.logger
         minio_client = self.minio_client
-        while(True):
-            tarefa = self.queue_format.get()  # bloqueia até chegar algo
+        while True:
+            tarefa: FormatExtractionDto = (
+                self.queue_format.get()
+            )  # bloqueia até chegar algo
             if tarefa is None:
                 logger.info("Encerrando serviço de formatação")
                 break
-            
-            list_extraction:list = tarefa.get("list_extraction",[])
-            job_id:str = tarefa.get("id","")
-            
-            if(list_extraction):
+
+            list_extraction: list[str] = tarefa.list_extraction
+            job_id: str = tarefa.job_id
+
+            if list_extraction:
                 md_list = list()
                 buffer_contents = []
 
-                logger.info(f"Iniciando união ({len(list_extraction)} jsons) dos conteúdos do job: {job_id}")
+                logger.info(
+                    f"Iniciando união ({len(list_extraction)} jsons) dos conteúdos do job: {job_id}"
+                )
 
                 for idx, path_extract in enumerate(list_extraction, start=1):
                     logger.info(f"União [{idx}/{len(list_extraction)}]")
 
-                    obj: dict = minio_client.get_json_object(self.bucket_name, path_extract)
+                    obj: dict = minio_client.get_json_object(
+                        self.bucket_name, path_extract
+                    )
                     content_string = obj.get("content", "")
 
                     if len(content_string) != 0:
@@ -58,30 +71,36 @@ class FormatService():
                             joined_content = "\n\n".join(buffer_contents)
 
                             messages = [
-                                {
-                                    "role": "system",
-                                    "content": FORMAT_PROMPT
-                                },
+                                {"role": "system", "content": FORMAT_PROMPT},
                                 {
                                     "role": "user",
-                                    "content": f"Converta o texto abaixo para Markdown:\n\n{joined_content}"
-                                }
+                                    "content": f"Converta o texto abaixo para Markdown:\n\n{joined_content}",
+                                },
                             ]
 
-                            res = self.client_openai.call_chat(messages, think=False,model="llama3.1")
+                            res = self.client_openai.call_chat(
+                                messages,
+                                think=False,
+                            )
                             md_list.append(res)
                             buffer_contents = []
 
                 logger.info("União finalizada")
 
-                with open("./tmp.md","w+") as outfile:
-                    outfile.write("".join(md_list))
-                    outfile.close()
-
-                chunks = self.docling.create_chunks("\n".join(md_list))
-                with open("./tmp.json","w+") as outfile:
-                    json.dump(chunks,outfile,ensure_ascii=False,indent=2)
-                    outfile.close()
+                md_list_join:str = "".join(md_list)
                 
-                logger.info(f"Inserção de {len(chunks)} chunks na collection {self.qdrant_service.collection_name}")
+                chunks = self.docling.create_chunks(md_list_join)
+
+                if self.debug_format:
+                    with open("./tmp.json", "w+") as outfile:
+                        json.dump(chunks, outfile, ensure_ascii=False, indent=2)
+                        outfile.close()
+
+                    with open("./tmp.md", "w+") as outfile:
+                        outfile.write(md_list_join)
+                        outfile.close()
+
+                logger.info(
+                    f"Inserção de {len(chunks)} chunks na collection {self.qdrant_service.collection_name}"
+                )
                 self.qdrant_service.add_chunks(document_id=job_id, chunks=chunks)

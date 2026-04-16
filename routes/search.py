@@ -6,6 +6,7 @@ from websockets.exceptions import ConnectionClosed
 
 SEARCH_ROUTE = "/search/document"
 
+
 def parse_extraction_protocol(data: str) -> tuple[str, str]:
     bucket, separator, path_document = data.partition(":")
 
@@ -24,7 +25,9 @@ async def search_document(websocket: ServerConnection, app_context):
     connection_id = str(uuid.uuid4())
 
     await manager.connect(connection_id, websocket)
-    logger.info("WebSocket conectado em %s connection_id=%s", SEARCH_ROUTE, connection_id)
+    logger.info(
+        "WebSocket conectado em %s connection_id=%s", SEARCH_ROUTE, connection_id
+    )
 
     try:
         async for data in websocket:
@@ -33,31 +36,44 @@ async def search_document(websocket: ServerConnection, app_context):
             try:
                 document_id, user_query = parse_extraction_protocol(data)
             except ValueError as exc:
-                logger.warning("Payload invalido recebido no websocket de busca: %s", data)
+                logger.warning(
+                    "Payload invalido recebido no websocket de busca: %s", data
+                )
                 await manager.send_personal_message(str(exc), websocket)
                 continue
 
             initial_question = user_query[::]
-            
-            response:str = search_service.search(user_query,document_id,llm_service,qdrant_service,logger)
-                
-            logger.info("Resposta da IA: \n%s",response)
-            
+
+            response: str = search_service.search(
+                user_query, document_id, llm_service, qdrant_service, logger
+            )
+
+            logger.info("Resposta da IA: \n%s", response)
+
             await manager.send_personal_message(
-                json.dumps({
+                json.dumps(
+                    {
                         "document_id": document_id,
                         "query": initial_question,
-                        "answer": response
-                    }, ensure_ascii=False),
+                        "answer": response,
+                    },
+                    ensure_ascii=False,
+                ),
                 websocket,
             )
 
     except ConnectionClosed:
-        logger.info("WebSocket desconectado em %s connection_id=%s", SEARCH_ROUTE, connection_id)
+        logger.info(
+            "WebSocket desconectado em %s connection_id=%s", SEARCH_ROUTE, connection_id
+        )
         manager.disconnect(connection_id)
     except Exception:
         logger.exception("Erro durante o processamento do websocket de busca")
         manager.disconnect(connection_id)
     else:
-        logger.info("WebSocket encerrado pelo cliente em %s connection_id=%s", SEARCH_ROUTE, connection_id)
+        logger.info(
+            "WebSocket encerrado pelo cliente em %s connection_id=%s",
+            SEARCH_ROUTE,
+            connection_id,
+        )
         manager.disconnect(connection_id)

@@ -1,5 +1,7 @@
-from openai import OpenAI
 import re
+
+from openai import OpenAI
+
 
 class LLMService:
     def __init__(self, values: dict):
@@ -14,28 +16,28 @@ class LLMService:
             "min_p": 0.0,
             "repeat_penalty": 1.12,
             "repeat_last_n": 128,
-            "seed": 42
+            "seed": 42,
         }
 
-    def call_chat(self, messages, think=True, model="llama",params=None) -> str:
-        if(params is None):
+    def call_chat(self, messages, think=True, model="llama", params=None | dict) -> str:
+        if params is None:
             params = self.params
-        
+
         completion = self.client_openai.chat.completions.create(
             model=model,
             messages=messages,
             temperature=params["temperature"],
             top_p=params["top_p"],
             extra_body={
-                "num_ctx": params.get("num_ctx",4096),
+                "num_ctx": params.get("num_ctx", 4096),
                 "top_k": params["top_k"],
                 "min_p": params["min_p"],
                 "repeat_penalty": params["repeat_penalty"],
                 "repeat_last_n": params["repeat_last_n"],
-                "seed": params["seed"]
-            }
+                "seed": params["seed"],
+            },
         )
-        
+
         res_final = completion.choices[0].message.content
         res_final = re.sub(r"<think>.*?</think>", "", res_final, flags=re.DOTALL)
 

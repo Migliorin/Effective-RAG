@@ -1,28 +1,30 @@
 import json
 import os
-
-from processing import PDF
-from models import OcrExtraction
-from services import BucketMinio
-
-from uuid import uuid4
 from queue import Queue
-from services import AppLogger
+from uuid import uuid4
 
-class OCRService():
-    def __init__(self, values: dict, queue: Queue, queue_format: Queue, logger:AppLogger):
+from dto import ExtractionDto, FormatExtractionDto, MinioExtractionDto
+from models import OcrExtraction
+from processing import PDF
+from services import AppLogger, BucketMinio
+
+
+class OCRService:
+    def __init__(
+        self, values: dict, queue: Queue, queue_format: Queue, logger: AppLogger
+    ):
         self.minio_client = BucketMinio(
             endpoint=values.get("MINIO_ENDPOINT"),
             access_key=values.get("MINIO_ACCESS_KEY"),
             secret_key=values.get("MINIO_SECRET_KEY"),
             secure=False,
         )
-        self.pdf_processing =  PDF()
+        self.pdf_processing = PDF()
         self.ocr_ext = OcrExtraction()
+        self.bucket_name = values.get("BUCKET_EXTRATION")
         self.logger = logger
         self.queue = queue
         self.queue_format = queue_format
-        self.bucket_name = values.get("BUCKET_EXTRATION")
 
     def extract_ocr_pages(self):
         logger = self.logger
@@ -34,23 +36,23 @@ class OCRService():
         document_path = None
         pages = [-1]
 
-        while(True):
-            tarefa:dict = self.queue.get()  # bloqueia até chegar algo
+        while True:
+            tarefa: ExtractionDto = self.queue.get()  # bloqueia até chegar algo
             if tarefa is None:
                 logger.info("Encerrando serviço de extração")
                 break
 
             logger.info(f"Tarefa recebida: {json.dumps(tarefa, indent=1)}")
 
-            job_id = tarefa.get("id")
-            bucket_name = tarefa.get("bucket_name")
-            object_name = tarefa.get("object_name")
+            job_id = tarefa.job_id
+            bucket_name = tarefa.bucket_name
+            object_name = tarefa.object_name
 
-            exist_folder = minio_client.verify_folder(self.bucket_name,job_id)
+            exist_folder: bool = minio_client.verify_folder(self.bucket_name, job_id)
 
-            if(exist_folder):
+            if exist_folder:
                 logger.info(f"Job id existente no bucket {job_id}")
-                pages, pages_path = minio_client.get_pages(self.bucket_name,job_id)
+                pages, pages_path = minio_client.get_pages(self.bucket_name, job_id)
                 logger.info(f"Paginas extraidas: {json.dumps(pages)}")
 
             try:
@@ -66,52 +68,54 @@ class OCRService():
                 )
                 logger.info("Download em %s", document_path)
 
-                list_paths: list[str] = pdf_processing.extract_pages_into_imgs(document_path)
-                logger.info(f"Imagens extraidas em:\n{json.dumps(list_paths, indent=1)}")
- 
+                list_paths: list[str] = pdf_processing.extract_pages_into_imgs(
+                    document_path
+                )
+                logger.info(
+                    f"Imagens extraidas em:\n{json.dumps(list_paths, indent=1)}"
+                )
+
                 logger.info("Iniciando extração")
                 path_extract_list = list()
 
-                for idx, list_path_ in enumerate(list_paths,start=1):
-                    if(idx - 1 <= pages[-1]):
+                for idx, list_path_ in enumerate(list_paths, start=1):
+                    if idx - 1 <= pages[-1]:
                         path_ = f"{job_id}/{pages_path[idx-1].split('/')[-1]}"
                         path_extract_list.append(path_)
                         continue
                     text = ocr_ext(list_path_)
                     path_extract = f"{job_id}/{uuid4()}.json"
-                    minio_client.put_json(
-                        self.bucket_name,
-                        path_extract,
-                        {
-                            "bucket_name":self.bucket_name,
-                            "object_name": path_extract,
-                            "content": text,
-                            "page": idx,
-                            "total_pages": len(list_paths)
-                        }
+
+                    obj_ = MinioExtractionDto(
+                        bucket_name=self.bucket_name,
+                        object_name=path_extract,
+                        content=text,
+                        page=idx,
+                        total_pages=len(list_paths),
                     )
+                    minio_client.put_json(self.bucket_name, path_extract, obj_.__dict__)
                     path_extract_list.append(path_extract)
                     logger.info("Texto extraído:\n%s\n", text[:50])
-                    logger.info(f"[{idx}/{len(list_paths)}] Armazenando extracao em: {path_extract}")
+                    logger.info(
+                        f"[{idx}/{len(list_paths)}] Armazenando extracao em: {path_extract}"
+                    )
                 pages = [-1]
                 logger.info("Extração finalizada")
 
-                job_obj = {
-                    "id" : job_id,
-                    "list_extraction" : path_extract_list
-                }
+                job_obj = FormatExtractionDto(
+                    job_id=job_id, list_extraction=path_extract_list
+                )
 
                 self.queue_format.put(job_obj)
 
             except Exception as exc:
-                logger.exception("Erro ao processar job_id=%s\n%s", job_id,exc)
+                logger.exception("Erro ao processar job_id=%s\n%s", job_id, exc)
 
             finally:
-                if(list_paths is not None):
+                if list_paths is not None:
                     for list_path_ in list_paths:
                         if os.path.exists(list_path_):
                             os.remove(list_path_)
-                elif(document_path is not None):
+                elif document_path is not None:
                     if os.path.exists(document_path):
                         os.remove(document_path)
-

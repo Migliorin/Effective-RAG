@@ -1,14 +1,14 @@
-from docling.document_converter import DocumentConverter, InputFormat
 from docling.chunking import HybridChunker
+from docling.document_converter import DocumentConverter, InputFormat
 
 
-class DoclingService():
+class DoclingService:
     def __init__(self):
         self.converter = DocumentConverter()
         self.chunker = HybridChunker()
 
-    def create_chunks(self,markdown_text:str)->list[dict]:
-        
+    def create_chunks(self, markdown_text: str) -> list[dict]:
+
         doc = self.converter.convert_string(
             content=markdown_text,
             format=InputFormat.MD,
@@ -17,11 +17,17 @@ class DoclingService():
 
         result = []
         for i, chunk in enumerate(self.chunker.chunk(dl_doc=doc), 1):
-            result.append({
-                "id": i,
-                "text": chunk.text,
-                "contextualized_text": self.chunker.contextualize(chunk),
-                "meta": chunk.meta.model_dump() if hasattr(chunk.meta, "model_dump") else str(chunk.meta),
-            })
+            result.append(
+                {
+                    "id": i,
+                    "text": chunk.text,
+                    "contextualized_text": self.chunker.contextualize(chunk),
+                    "meta": (
+                        chunk.meta.model_dump()
+                        if hasattr(chunk.meta, "model_dump")
+                        else str(chunk.meta)
+                    ),
+                }
+            )
 
         return result
