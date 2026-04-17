@@ -40,7 +40,7 @@ class BucketMinio:
                 conteudo: dict = json.loads(response.read().decode("utf-8"))
 
                 page = conteudo.get("page")
-                object_name = conteudo.get("object_name")
+                object_name = conteudo.get("path_extract")
 
                 if page is not None and object_name is not None:
                     temp_items.append((page, object_name))
