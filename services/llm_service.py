@@ -19,9 +19,13 @@ class LLMService:
             "seed": 42,
         }
 
-    def call_chat(self, messages, think=True, model="llama", params=None | dict) -> str:
+    def call_chat(self, messages:list, think=True, model="llama", params=None) -> str:
         if params is None:
             params = self.params
+            
+        else:
+            params_ = self.params.copy()
+            params = params_.update(params)
 
         completion = self.client_openai.chat.completions.create(
             model=model,
