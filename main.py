@@ -8,7 +8,7 @@ from core import get_dotenv_values
 from dto import AppContextDto, ServerConfigDto
 from routes import EXTRACTION_ROUTE, SEARCH_ROUTE, extraction, search_document
 from services import (AppLogger, ConnectionManager, FormatService, LLMService,
-                      OCRService, QdrantService, SearchService)
+                      OCRService, QdrantService, SearchService, RedisService)
 
 
 def build_server_config(values: dict) -> ServerConfigDto:
@@ -27,6 +27,7 @@ def build_app_context(values: dict) -> AppContextDto:
     format_service = FormatService(values, queue_format, logger, qdrant_service)
     llm_service = LLMService(values)
     search_service = SearchService(values)
+    redis_service = RedisService(values)
 
     return AppContextDto(
         logger=logger,
@@ -38,6 +39,7 @@ def build_app_context(values: dict) -> AppContextDto:
         qdrant_service=qdrant_service,
         llm_service=llm_service,
         search_service=search_service,
+        redis_service=redis_service,
         worker_thread=None,
         worker_thread_format=None,
     )

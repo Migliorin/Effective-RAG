@@ -50,7 +50,7 @@ async def extraction(websocket: ServerConnection, app_context):
             queue.put(job_obj)
 
             await manager.send_personal_message(
-                f"Job iniciado: {json.dumps(job_obj)}", websocket
+                f"{json.dumps(job_obj.__dict__)}", websocket
             )
 
     except ConnectionClosed:

@@ -6,3 +6,4 @@ from .llm_service import *
 from .ocr_service import *
 from .qdrant_service import *
 from .search_service import *
+from .redis_service import *

@@ -14,5 +14,6 @@ class AppContextDto:
     qdrant_service: object
     llm_service: object
     search_service: object
+    redis_service:object
     worker_thread: Optional[Thread]
     worker_thread_format: Optional[Thread]
