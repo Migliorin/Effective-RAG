@@ -10,3 +10,6 @@ __pycache__/
 
 # Environment python
 .venv/
+
+# Jupyter files
+*.ipynb
