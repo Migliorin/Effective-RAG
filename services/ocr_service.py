@@ -42,7 +42,7 @@ class OCRService:
                 logger.info("Encerrando serviço de extração")
                 break
 
-            logger.info(f"Tarefa recebida: {json.dumps(tarefa, indent=1)}")
+            logger.info(f"Tarefa recebida: {json.dumps(tarefa.__dict__, indent=1)}")
 
             job_id = tarefa.job_id
             bucket_name = tarefa.bucket_name
@@ -88,7 +88,7 @@ class OCRService:
 
                     obj_ = MinioExtractionDto(
                         bucket_name=self.bucket_name,
-                        object_name=path_extract,
+                        path_extract=path_extract,
                         content=text,
                         page=idx,
                         total_pages=len(list_paths),
