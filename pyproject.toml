@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "accelerate>=1.13.0",
+    "doclayout-yolo>=0.0.4",
     "docling>=2.86.0",
     "glmocr[selfhosted]>=0.1.5",
     "jupyter>=1.1.1",
@@ -16,10 +17,12 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.22",
     "qdrant-client>=1.12.0",
+    "redis>=7.4.0",
     "sentence-transformers>=5.4.0",
     "torch>=2.11.0",
     "torchvision>=0.26.0",
     "transformers",
+    "ultralytics>=8.4.75",
     "websockets>=16.0",
 ]
 
