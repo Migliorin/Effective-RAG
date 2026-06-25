@@ -13,3 +13,7 @@ __pycache__/
 
 # Jupyter files
 *.ipynb
+
+
+# PDF Files
+*.pdf
