@@ -1,0 +1,117 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_REST_API_PORT}:6333"
+      - "${QDRANT_GRPC_PORT}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
+    secrets:
+      - source: qdrant_local_config
+        target: /qdrant/config/local.yaml
+    networks:
+      - effective_rag
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    secrets:
+      - postgres_root_user
+      - postgres_root_password
+    environment:
+      POSTGRES_USER_FILE: /run/secrets/postgres_root_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_root_password
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - '${POSTGRES_PORT}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - effective_rag
+
+  redis:
+    image: redis:8-alpine
+    container_name: redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --aclfile /run/secrets/redis_users_acl
+    secrets:
+      - redis_users_acl
+    ports:
+      - '${REDIS_PORT}:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - effective_rag
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - '${MINIO_API_PORT}:9000'
+      - '${MINIO_CONSOLE_PORT}:9001'
+    secrets:
+      - minio_root_user
+      - minio_root_password
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
+    volumes:
+      - minio_data:/data
+    networks:
+      - effective_rag
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: ['/bin/sh', '/usr/local/bin/init-minio.sh']
+    secrets:
+      - minio_root_user
+      - minio_root_password
+      - minio_backend_access_key
+      - minio_backend_secret_key
+      - minio_ai_access_key
+      - minio_ai_secret_key
+    volumes:
+      - ./minio-policy/documents-backend-policy.json:/tmp/documents-backend-policy.json:ro
+      - ./minio-policy/documents-ai-reader-policy.json:/tmp/documents-ai-reader-policy.json:ro
+      - ./minio-policy/init-minio.sh:/usr/local/bin/init-minio.sh:ro
+    networks:
+      - effective_rag
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  qdrant_data:
+  qdrant_snapshots:
+
+secrets:
+  minio_root_user:
+    file: ./secrets/minio_root_user.txt
+  minio_root_password:
+    file: ./secrets/minio_root_password.txt
+  minio_backend_access_key:
+    file: ./secrets/minio_backend_access_key.txt
+  minio_backend_secret_key:
+    file: ./secrets/minio_backend_secret_key.txt
+  minio_ai_access_key:
+    file: ./secrets/minio_ai_access_key.txt
+  minio_ai_secret_key:
+    file: ./secrets/minio_ai_secret_key.txt
+  postgres_root_user:
+    file: ./secrets/postgres_root_user.txt
+  postgres_root_password:
+    file: ./secrets/postgres_root_password.txt
+  redis_users_acl:
+    file: ./secrets/redis_users.acl
+  qdrant_local_config:
+    file: ./secrets/qdrant-local.yaml
+
+networks:
+  effective_rag:
+    # driver: bridge
