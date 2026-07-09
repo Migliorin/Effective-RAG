@@ -1,5 +1,6 @@
 # Python cache
 __pycache__/
+.ipynb_checkpoints/
 
 # Python binary files
 *.pyc
@@ -17,3 +18,6 @@ __pycache__/
 
 # PDF Files
 *.pdf
+
+# Secret files
+secrets/
