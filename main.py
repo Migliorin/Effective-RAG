@@ -1,127 +1,91 @@
-import asyncio
-from queue import Queue
-from threading import Thread
+import logging
+import os
 
-from websockets.asyncio.server import ServerConnection, serve
+from effective_rag import EffectiveRag, StorageDataMinio
 
-from core import get_dotenv_values
-from dto import AppContextDto, ServerConfigDto
-from routes import EXTRACTION_ROUTE, SEARCH_ROUTE, extraction, search_document
-from services import (AppLogger, ConnectionManager, FormatService, LLMService,
-                      OCRService, QdrantService, SearchService, RedisService)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
 
+class TestProcess():
+    def __init__(self,):
+        self.MINIO_URL = "localhost:9000"
+        self.ACCESS_KEY = "ai-reader-user"
+        self.SECRET_KEY = "g7jgKu20uXsd"
+        self.SECURE = False
 
-def build_server_config(values: dict) -> ServerConfigDto:
-    host = values.get("HOST", "0.0.0.0")
-    port = int(values.get("PORT", 8000))
-    return ServerConfigDto(host=host, port=port)
+        self.model_pt_path = "training/outputs/yolo12n_2026-06-24_00-16-46/weights/best.pt"
+        self.url = "http://localhost:8081/v1"
 
+        self.pdf_minio_path = "1/811131b0-67ff-443e-89fb-4b956a7fb2b6.pdf"
+        self.bucket_name = "documents"
 
-def build_app_context(values: dict) -> AppContextDto:
-    logger = AppLogger().get_logger()
-    queue = Queue()
-    queue_format = Queue()
-    connection_manager = ConnectionManager()
-    ocr_service = OCRService(values, queue, queue_format, logger)
-    qdrant_service = QdrantService(values)
-    format_service = FormatService(values, queue_format, logger, qdrant_service)
-    llm_service = LLMService(values)
-    search_service = SearchService(values)
-    redis_service = RedisService(values)
-
-    return AppContextDto(
-        logger=logger,
-        queue=queue,
-        queue_format=queue_format,
-        connection_manager=connection_manager,
-        ocr_service=ocr_service,
-        format_service=format_service,
-        qdrant_service=qdrant_service,
-        llm_service=llm_service,
-        search_service=search_service,
-        redis_service=redis_service,
-        worker_thread=None,
-        worker_thread_format=None,
-    )
+        self.qdrant_url = "http://localhost:6333"
+        self.qdrant_passwd = "sjnf98hs99uCNBAsd0asdbA8"
 
 
-def start_extraction_worker(app_context: AppContextDto) -> None:
-    if app_context.worker_thread is None or not app_context.worker_thread.is_alive():
-        app_context.worker_thread = Thread(
-            target=app_context.ocr_service.extract_ocr_pages,
-            name="ocr-extraction-worker",
+    def extract_and_upload(self):
+
+        bucket_minio = StorageDataMinio(
+            self.MINIO_URL,
+            self.ACCESS_KEY,
+            self.SECRET_KEY,
+            self.SECURE
         )
-        app_context.worker_thread.start()
 
-    if (
-        app_context.worker_thread_format is None
-        or not app_context.worker_thread_format.is_alive()
-    ):
-        app_context.worker_thread_format = Thread(
-            target=app_context.format_service.format_text,
-            name="format-text-worker",
+        path_pdf = bucket_minio.download_file(
+            self.bucket_name,
+            self.pdf_minio_path,
+            delete=False
         )
-        app_context.worker_thread_format.start()
+
+        effective_rag = EffectiveRag(
+            self.url,
+            self.model_pt_path
+        )
+
+        id_name = path_pdf.replace(".pdf","").split("/")[-1]
+        local_file_md = effective_rag.extract_markdown(id_name,path_pdf)
+        os.remove(path_pdf)
+
+        status = bucket_minio.put_md_file(
+            "extraction",
+            self.pdf_minio_path.replace(".pdf",".md"),
+            local_file_md
+        )
+        if(status is not None):
+            print(status)
+            os.remove(local_file_md)
 
 
-def stop_extraction_worker(app_context: AppContextDto) -> None:
-    workers = [
-        (app_context.queue, app_context.worker_thread, "worker_thread"),
-        (
-            app_context.queue_format,
-            app_context.worker_thread_format,
-            "worker_thread_format",
-        ),
-    ]
 
-    for queue_, worker_, attr_name in workers:
-        if worker_ is not None and worker_.is_alive():
-            queue_.put(None)
-            worker_.join()
-        setattr(app_context, attr_name, None)
+    def chunknizer_and_save(self):
+        effective_rag = EffectiveRag(
+            server_ip=self.url,
+            model_pt_path=self.model_pt_path,
+            qdrant_url=self.qdrant_url,
+            qdrant_passwd=self.qdrant_passwd
+        )
 
+        bucket_minio = StorageDataMinio(
+            self.MINIO_URL,
+            self.ACCESS_KEY,
+            self.SECRET_KEY,
+            self.SECURE
+        )
 
-async def websocket_router(websocket: ServerConnection, app_context: AppContextDto):
-    path = websocket.request.path
-    routes = {EXTRACTION_ROUTE: extraction, SEARCH_ROUTE: search_document}
+        path_md = bucket_minio.download_file(
+            bucket_name="extraction",
+            object_name="1/811131b0-67ff-443e-89fb-4b956a7fb2b6.md",
+            suffix=".md",
+            delete=False
+        )
 
-    handler = routes.get(path)
-    if handler is None:
-        app_context.logger.warning("Rota websocket nao encontrada: %s", path)
-        await websocket.close(code=1008, reason="Rota websocket invalida.")
-        return
+        effective_rag.vectorize_markdown_file(path_md=path_md)
 
-    await handler(websocket, app_context)
+        os.remove(path_md)
 
 
-async def main():
-    values = get_dotenv_values()
-    server_config = build_server_config(values)
-    app_context = build_app_context(values)
-    logger = app_context.logger
-    logger.info("Inicializando recursos da aplicacao")
-    start_extraction_worker(app_context)
-
-    try:
-        async with serve(
-            lambda websocket: websocket_router(websocket, app_context),
-            server_config.host,
-            server_config.port,
-            logger=logger,
-        ):
-            logger.info(
-                "Servidor websocket escutando em ws://%s:%s",
-                server_config.host,
-                server_config.port,
-            )
-            await asyncio.Future()
-    finally:
-        logger.info("Encerrando recursos da aplicacao")
-        stop_extraction_worker(app_context)
-
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        pass
+test_process = TestProcess()
+test_process.chunknizer_and_save()
