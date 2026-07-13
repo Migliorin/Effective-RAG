@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { UsersService} from  '../users/users.service.js'
+import { UsersModule } from  '../users/users.module.js';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import {PrismaService} from '../prisma/prisma.service.js';
-import { AuthController } from './auth.controller';
+import { AuthController } from './auth.controller.js';
 
 @Module({
   imports: [
@@ -15,8 +14,9 @@ import { AuthController } from './auth.controller';
         signOptions: { expiresIn: config.getOrThrow('EXPIRESS_IN') },
       }),
     }),
+    UsersModule,
   ],
-  providers: [AuthService, UsersService, ConfigService, PrismaService],
+  providers: [AuthService],
   controllers: [AuthController]
 })
 export class AuthModule {}
